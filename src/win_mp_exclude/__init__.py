@@ -1,5 +1,38 @@
-"""Command line helpers for Microsoft Defender exclusion paths."""
+"""Manage Microsoft Defender exclusion paths from Python, CLI, or GUI."""
 
-__all__ = ["__version__"]
+from .api import (
+    AdministratorRequiredError,
+    DefenderTarget,
+    ExclusionListResult,
+    ExclusionResult,
+    PowerShellError,
+    UnsupportedPlatformError,
+    WinMpExcludeError,
+    add_exclusion,
+    change_exclusion,
+    is_admin,
+    is_windows,
+    list_exclusions,
+    remove_exclusion,
+    resolve_target,
+)
 
-__version__ = "0.1.0"
+__all__ = [
+    "__version__",
+    "AdministratorRequiredError",
+    "DefenderTarget",
+    "ExclusionListResult",
+    "ExclusionResult",
+    "PowerShellError",
+    "UnsupportedPlatformError",
+    "WinMpExcludeError",
+    "add_exclusion",
+    "change_exclusion",
+    "is_admin",
+    "is_windows",
+    "list_exclusions",
+    "remove_exclusion",
+    "resolve_target",
+]
+
+__version__ = "0.2.0"

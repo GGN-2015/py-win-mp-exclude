@@ -1,7 +1,7 @@
 [project]
 name = "py-win-mp-exclude"
-version = "0.1.0"
-description = "Manage Microsoft Defender path exclusions from a Windows command line."
+version = "0.2.0"
+description = "Manage Microsoft Defender path exclusions from Python, CLI, or GUI."
 authors = [{ name = "GGN_2015" }]
 license = "MIT"
 readme = "README.md"
@@ -28,6 +28,8 @@ Repository = "https://github.com/GGN-2015/py-win-mp-exclude"
 [project.scripts]
 win-mp-exclude = "win_mp_exclude.cli:main"
 py-win-mp-exclude = "win_mp_exclude.cli:main"
+win-mp-exclude-gui = "win_mp_exclude.gui:main"
+py-win-mp-exclude-gui = "win_mp_exclude.gui:main"
 
 [tool.poetry]
 packages = [{ include = "win_mp_exclude", from = "src" }]

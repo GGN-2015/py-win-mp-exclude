@@ -1,192 +1,63 @@
 from __future__ import annotations
 
 import argparse
-import ctypes
-import os
-import subprocess
 import sys
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional, Sequence
 
 from . import __version__
-
-ELEVATION_FLAG = "--elevation-attempted"
-WINDOWS_POWERSHELL = "powershell.exe"
-
-
-@dataclass(frozen=True)
-class DefenderTarget:
-    """A path that can be passed to Microsoft Defender's ExclusionPath setting."""
-
-    raw: str
-    path: Path
-    kind: str
-    exists: bool
-
-    @property
-    def display_path(self) -> str:
-        return str(self.path)
+from .api import (
+    ELEVATION_FLAG,
+    AdministratorRequiredError,
+    PowerShellError,
+    UnsupportedPlatformError,
+    add_exclusion,
+    build_exclusion_script,
+    build_list_script,
+    ensure_admin_for_mutation,
+    list_exclusions,
+    remove_exclusion,
+    resolve_target,
+)
 
 
-def is_windows() -> bool:
-    return os.name == "nt"
+def print_error(exc: Exception) -> None:
+    print(str(exc), file=sys.stderr)
 
 
-def is_admin() -> bool:
-    if not is_windows():
-        return False
+def handle_add_or_remove(
+    action: str,
+    path: str,
+    *,
+    dry_run: bool,
+    elevation_attempted: bool,
+) -> int:
+    operation = add_exclusion if action == "add" else remove_exclusion
+    result = operation(path, dry_run=dry_run, elevation_attempted=elevation_attempted)
 
-    try:
-        return bool(ctypes.windll.shell32.IsUserAnAdmin())
-    except Exception:
-        return False
-
-
-def resolve_target(raw_path: str) -> DefenderTarget:
-    expanded = Path(raw_path).expanduser()
-    absolute = expanded if expanded.is_absolute() else Path.cwd() / expanded
-
-    try:
-        resolved = absolute.resolve(strict=False)
-    except OSError:
-        resolved = absolute.absolute()
-
-    exists = resolved.exists()
-    if exists:
-        kind = "folder" if resolved.is_dir() else "file"
-    elif raw_path.endswith(("\\", "/")):
-        kind = "folder"
-    elif resolved.suffix:
-        kind = "file"
-    else:
-        kind = "path"
-
-    return DefenderTarget(raw=raw_path, path=resolved, kind=kind, exists=exists)
-
-
-def quote_powershell_string(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
-
-
-def build_exclusion_script(action: str, target: DefenderTarget) -> str:
-    cmdlet = {
-        "add": "Add-MpPreference",
-        "remove": "Remove-MpPreference",
-    }[action]
-
-    return "\n".join(
-        [
-            "$ErrorActionPreference = 'Stop'",
-            f"{cmdlet} -ExclusionPath {quote_powershell_string(target.display_path)}",
-        ]
-    )
-
-
-def build_list_script() -> str:
-    return "\n".join(
-        [
-            "$ErrorActionPreference = 'Stop'",
-            "$paths = (Get-MpPreference).ExclusionPath",
-            "if ($null -ne $paths) { $paths | ForEach-Object { $_ } }",
-        ]
-    )
-
-
-def run_powershell(script: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
-            WINDOWS_POWERSHELL,
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            script,
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-
-def request_elevation(argv: Sequence[str]) -> int:
-    from py_admin_launch import AdminLaunchError, launch
-
-    command = [
-        sys.executable,
-        "-m",
-        "win_mp_exclude",
-        ELEVATION_FLAG,
-        *argv,
-    ]
-
-    try:
-        launch(command, cwd=os.getcwd(), wait=True)
-    except AdminLaunchError as exc:
-        print(f"Administrator elevation failed: {exc}", file=sys.stderr)
-        return 1
-
-    print("Administrator elevation was requested. Continue in the elevated window.")
-    return 0
-
-
-def ensure_admin(args: argparse.Namespace, original_argv: Sequence[str]) -> Optional[int]:
-    if args.command not in {"add", "remove"}:
-        return None
-
-    if args.dry_run:
-        return None
-
-    if is_admin():
-        return None
-
-    if args.elevation_attempted:
-        print(
-            "This command is not running as administrator after one elevation attempt.",
-            file=sys.stderr,
-        )
-        return 1
-
-    return request_elevation(original_argv)
-
-
-def print_process_output(completed: subprocess.CompletedProcess[str]) -> None:
-    if completed.stdout:
-        print(completed.stdout.rstrip())
-    if completed.stderr:
-        print(completed.stderr.rstrip(), file=sys.stderr)
-
-
-def handle_add_or_remove(action: str, path: str, dry_run: bool) -> int:
-    target = resolve_target(path)
-    script = build_exclusion_script(action, target)
-
-    if dry_run:
-        print(script)
+    if result.dry_run:
+        print(result.script)
         return 0
-
-    completed = run_powershell(script)
-    print_process_output(completed)
-    if completed.returncode != 0:
-        return completed.returncode
-
-    status = "Added" if action == "add" else "Removed"
-    existence_note = "" if target.exists else " (path does not currently exist)"
-    print(f"{status} Defender exclusion for {target.kind}: {target.display_path}{existence_note}")
+    if result.elevation_requested:
+        print("Administrator elevation was requested. Continue in the elevated window.")
+        return 0
+    if result.stdout:
+        print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip(), file=sys.stderr)
+    print(result.message)
     return 0
 
 
 def handle_list(dry_run: bool) -> int:
-    script = build_list_script()
-    if dry_run:
-        print(script)
+    result = list_exclusions(dry_run=dry_run)
+    if result.dry_run:
+        print(result.script)
         return 0
-
-    completed = run_powershell(script)
-    print_process_output(completed)
-    if completed.returncode != 0:
-        return completed.returncode
-    if not completed.stdout.strip():
+    if result.stderr:
+        print(result.stderr.rstrip(), file=sys.stderr)
+    if result.exclusions:
+        print("\n".join(result.exclusions))
+    else:
         print("No Microsoft Defender path exclusions are configured.")
     return 0
 
@@ -229,20 +100,46 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv))
 
-    if not is_windows():
-        print("This tool only supports Windows.", file=sys.stderr)
+    try:
+        launched = ensure_admin_for_mutation(
+            argv,
+            elevation_attempted=args.elevation_attempted,
+            dry_run=args.dry_run or args.command == "list",
+        )
+        if launched:
+            print("Administrator elevation was requested. Continue in the elevated window.")
+            return 0
+
+        if args.command == "add":
+            return handle_add_or_remove(
+                "add",
+                args.path,
+                dry_run=args.dry_run,
+                elevation_attempted=args.elevation_attempted,
+            )
+        if args.command == "remove":
+            return handle_add_or_remove(
+                "remove",
+                args.path,
+                dry_run=args.dry_run,
+                elevation_attempted=args.elevation_attempted,
+            )
+        if args.command == "list":
+            return handle_list(args.dry_run)
+    except (AdministratorRequiredError, PowerShellError, UnsupportedPlatformError) as exc:
+        print_error(exc)
         return 1
-
-    elevation_result = ensure_admin(args, argv)
-    if elevation_result is not None:
-        return elevation_result
-
-    if args.command == "add":
-        return handle_add_or_remove("add", args.path, args.dry_run)
-    if args.command == "remove":
-        return handle_add_or_remove("remove", args.path, args.dry_run)
-    if args.command == "list":
-        return handle_list(args.dry_run)
 
     parser.error("unknown command")
     return 2
+
+
+__all__ = [
+    "ELEVATION_FLAG",
+    "add_exclusion",
+    "build_exclusion_script",
+    "build_list_script",
+    "list_exclusions",
+    "remove_exclusion",
+    "resolve_target",
+]
