@@ -13,14 +13,11 @@ from .api import (
     PowerShellError,
     UnsupportedPlatformError,
     add_exclusion,
-    build_exclusion_script,
-    build_list_script,
     is_admin,
     is_windows,
     list_exclusions,
     remove_exclusion,
     request_gui_elevation,
-    resolve_target,
 )
 
 
@@ -30,7 +27,6 @@ class DefenderExclusionsApp(ttk.Frame):
         self.master = master
         self.path_var = tk.StringVar()
         self.status_var = tk.StringVar()
-        self.preview_var = tk.StringVar(value=build_list_script())
         self._build_widgets()
         self.refresh()
 
@@ -60,9 +56,7 @@ class DefenderExclusionsApp(ttk.Frame):
         ttk.Button(buttons, text="Add", command=self.add).grid(row=0, column=0, padx=(0, 6))
         ttk.Button(buttons, text="Remove", command=self.remove).grid(row=0, column=1, padx=(0, 6))
         ttk.Button(buttons, text="Remove Selected", command=self.remove_selected).grid(row=0, column=2, padx=(0, 6))
-        ttk.Button(buttons, text="Refresh", command=self.refresh).grid(row=0, column=3, padx=(0, 6))
-        ttk.Button(buttons, text="Preview Add", command=lambda: self.preview("add")).grid(row=0, column=4, padx=(0, 6))
-        ttk.Button(buttons, text="Preview Remove", command=lambda: self.preview("remove")).grid(row=0, column=5)
+        ttk.Button(buttons, text="Refresh", command=self.refresh).grid(row=0, column=3)
 
         list_frame = ttk.Frame(self)
         list_frame.grid(row=2, column=0, sticky="nsew")
@@ -77,27 +71,18 @@ class DefenderExclusionsApp(ttk.Frame):
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.exclusions.configure(yscrollcommand=scrollbar.set)
 
-        preview = ttk.LabelFrame(self, text="PowerShell")
-        preview.grid(row=3, column=0, sticky="ew", pady=(10, 0))
-        preview.columnconfigure(0, weight=1)
-
-        preview_label = ttk.Label(preview, textvariable=self.preview_var, wraplength=680, justify="left")
-        preview_label.grid(row=0, column=0, sticky="ew", padx=8, pady=6)
-
         status = ttk.Label(self, textvariable=self.status_var, anchor="w")
-        status.grid(row=4, column=0, sticky="ew", pady=(10, 0))
+        status.grid(row=3, column=0, sticky="ew", pady=(10, 0))
 
     def choose_file(self) -> None:
         path = filedialog.askopenfilename(title="Choose a file to exclude")
         if path:
             self.path_var.set(path)
-            self.preview("add")
 
     def choose_folder(self) -> None:
         path = filedialog.askdirectory(title="Choose a folder to exclude")
         if path:
             self.path_var.set(path)
-            self.preview("add")
 
     def selected_path(self) -> Optional[str]:
         selection = self.exclusions.curselection()
@@ -109,7 +94,6 @@ class DefenderExclusionsApp(ttk.Frame):
         selected = self.selected_path()
         if selected:
             self.path_var.set(selected)
-            self.preview("remove")
 
     def require_path(self) -> Optional[str]:
         path = self.path_var.get().strip()
@@ -159,15 +143,6 @@ class DefenderExclusionsApp(ttk.Frame):
 
         count = len(result.exclusions)
         self.status_var.set(f"{count} Defender path exclusion{'s' if count != 1 else ''} configured.")
-        self.preview_var.set(result.script)
-
-    def preview(self, action: str = "add") -> None:
-        path = self.path_var.get().strip()
-        if path:
-            target = resolve_target(path)
-            self.preview_var.set(build_exclusion_script(action, target))
-        else:
-            self.preview_var.set(build_list_script())
 
     def show_error(self, exc: Exception) -> None:
         self.status_var.set(str(exc))

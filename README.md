@@ -60,8 +60,8 @@ win-mp-exclude-gui
 ```
 
 The GUI can add exclusions, remove exclusions, remove a selected exclusion, list
-current exclusions, and preview the PowerShell command it will run. The package
-also installs the alias `py-win-mp-exclude-gui`.
+current exclusions, and refresh the list. The package also installs the alias
+`py-win-mp-exclude-gui`.
 
 ## Python API
 

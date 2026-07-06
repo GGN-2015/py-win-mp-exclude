@@ -128,5 +128,5 @@ def test_cli_dry_run_does_not_auto_elevate(monkeypatch):
     assert ensure_cli_elevation(args, ["--dry-run", "remove", "C:\\Temp"]) is False
 
 
-def test_version_is_bumped_for_cli_elevation_fix():
-    assert __version__ == "0.2.1"
+def test_version_is_bumped_for_gui_preview_removal():
+    assert __version__ == "0.2.2"
