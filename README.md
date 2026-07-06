@@ -9,10 +9,11 @@ The tool uses PowerShell's Defender cmdlets:
 - `Remove-MpPreference -ExclusionPath`
 - `Get-MpPreference`
 
-When a mutating CLI command or the GUI starts without administrator privileges,
-the program relaunches itself once through
+When a CLI subcommand or the GUI starts without administrator privileges, the
+program relaunches itself once through
 [`py-admin-launch`](https://pypi.org/project/py-admin-launch/). A hidden startup
-flag prevents repeated elevation attempts.
+flag prevents repeated elevation attempts. `--dry-run` commands only print the
+PowerShell script and do not request elevation.
 
 ## Installation
 

@@ -1,6 +1,6 @@
 [project]
 name = "py-win-mp-exclude"
-version = "0.2.0"
+version = "0.2.1"
 description = "Manage Microsoft Defender path exclusions from Python, CLI, or GUI."
 authors = [{ name = "GGN_2015" }]
 license = "MIT"

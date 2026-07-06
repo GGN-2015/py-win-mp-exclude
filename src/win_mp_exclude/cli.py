@@ -13,9 +13,11 @@ from .api import (
     add_exclusion,
     build_exclusion_script,
     build_list_script,
-    ensure_admin_for_mutation,
+    ensure_windows,
+    is_admin,
     list_exclusions,
     remove_exclusion,
+    request_elevation,
     resolve_target,
 )
 
@@ -32,7 +34,12 @@ def handle_add_or_remove(
     elevation_attempted: bool,
 ) -> int:
     operation = add_exclusion if action == "add" else remove_exclusion
-    result = operation(path, dry_run=dry_run, elevation_attempted=elevation_attempted)
+    result = operation(
+        path,
+        dry_run=dry_run,
+        elevate=False,
+        elevation_attempted=elevation_attempted,
+    )
 
     if result.dry_run:
         print(result.script)
@@ -60,6 +67,26 @@ def handle_list(dry_run: bool) -> int:
     else:
         print("No Microsoft Defender path exclusions are configured.")
     return 0
+
+
+def command_requires_elevation(command: str, *, dry_run: bool) -> bool:
+    return command in {"add", "remove", "list"} and not dry_run
+
+
+def ensure_cli_elevation(args: argparse.Namespace, argv: Sequence[str]) -> bool:
+    """Return True when an elevated CLI replacement process was launched."""
+
+    ensure_windows()
+    if not command_requires_elevation(args.command, dry_run=args.dry_run):
+        return False
+    if is_admin():
+        return False
+    if args.elevation_attempted:
+        raise AdministratorRequiredError(
+            "This CLI command is not running as administrator after one elevation attempt."
+        )
+    request_elevation(argv)
+    return True
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -101,11 +128,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(list(argv))
 
     try:
-        launched = ensure_admin_for_mutation(
-            argv,
-            elevation_attempted=args.elevation_attempted,
-            dry_run=args.dry_run or args.command == "list",
-        )
+        launched = ensure_cli_elevation(args, argv)
         if launched:
             print("Administrator elevation was requested. Continue in the elevated window.")
             return 0

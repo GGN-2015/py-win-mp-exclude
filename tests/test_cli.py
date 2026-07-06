@@ -10,7 +10,7 @@ from win_mp_exclude.api import (
     quote_powershell_string,
     resolve_target,
 )
-from win_mp_exclude.cli import build_parser
+from win_mp_exclude.cli import build_parser, ensure_cli_elevation
 
 
 def test_quote_powershell_string_escapes_single_quotes():
@@ -87,5 +87,46 @@ def test_cli_parser_accepts_hidden_elevation_flag():
     assert args.command == "add"
 
 
-def test_version_is_bumped_for_second_publish():
-    assert __version__ == "0.2.0"
+def test_cli_add_auto_elevates_before_running(monkeypatch):
+    parser = build_parser()
+    args = parser.parse_args(["add", "C:\\Temp"])
+    launched = []
+
+    monkeypatch.setattr("win_mp_exclude.cli.ensure_windows", lambda: None)
+    monkeypatch.setattr("win_mp_exclude.cli.is_admin", lambda: False)
+    monkeypatch.setattr("win_mp_exclude.cli.request_elevation", lambda argv: launched.append(list(argv)))
+
+    assert ensure_cli_elevation(args, ["add", "C:\\Temp"]) is True
+    assert launched == [["add", "C:\\Temp"]]
+
+
+def test_cli_list_auto_elevates_before_running(monkeypatch):
+    parser = build_parser()
+    args = parser.parse_args(["list"])
+    launched = []
+
+    monkeypatch.setattr("win_mp_exclude.cli.ensure_windows", lambda: None)
+    monkeypatch.setattr("win_mp_exclude.cli.is_admin", lambda: False)
+    monkeypatch.setattr("win_mp_exclude.cli.request_elevation", lambda argv: launched.append(list(argv)))
+
+    assert ensure_cli_elevation(args, ["list"]) is True
+    assert launched == [["list"]]
+
+
+def test_cli_dry_run_does_not_auto_elevate(monkeypatch):
+    parser = build_parser()
+    args = parser.parse_args(["--dry-run", "remove", "C:\\Temp"])
+
+    monkeypatch.setattr("win_mp_exclude.cli.ensure_windows", lambda: None)
+    monkeypatch.setattr("win_mp_exclude.cli.is_admin", lambda: False)
+
+    def fail_request(_argv):
+        raise AssertionError("dry-run must not request elevation")
+
+    monkeypatch.setattr("win_mp_exclude.cli.request_elevation", fail_request)
+
+    assert ensure_cli_elevation(args, ["--dry-run", "remove", "C:\\Temp"]) is False
+
+
+def test_version_is_bumped_for_cli_elevation_fix():
+    assert __version__ == "0.2.1"
